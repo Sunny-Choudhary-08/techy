@@ -1,0 +1,85 @@
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap');
+
+*{margin:0;padding:0;box-sizing:border-box;}
+body{
+  font-family:'Poppins',sans-serif;
+  background: radial-gradient(circle at 25% 30%, #0ea5e9 0%, #0f172a 40%, #020617 100%);
+  height:100vh;
+  display:flex;
+  flex-direction: column;
+  align-items:center;
+  justify-content:center;
+  overflow:hidden;
+  color:white;
+  position:relative;
+  /* Initial state for fade-in */
+  opacity: 0; 
+  transition: opacity 1s ease-in-out;
+}
+
+/* Glass box */
+.selection-box{
+  background:rgba(255,255,255,0.08);
+  backdrop-filter:blur(15px);
+  border-radius:25px;
+  padding:50px 40px;
+  width:350px;
+  box-shadow:0 0 30px rgba(56,189,248,0.3);
+  text-align:center;
+  z-index:5;
+  animation:fadeIn 1.2s ease;
+}
+@keyframes fadeIn{
+  from{opacity:0;transform:scale(0.8);}
+  to{opacity:1;transform:scale(1);}
+}
+
+h2{
+  margin-bottom:10px;
+  font-weight:600;
+  color: #38bdf8;
+}
+p{
+  color:#cbd5e1;
+  font-size:1rem;
+  margin-bottom:30px;
+}
+.welcome-user {
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin-bottom: 30px;
+    display: block; /* Ensures user message is centered */
+}
+
+.button-group {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+button{
+  width:100%;
+  padding:15px;
+  border:none;
+  border-radius:12px;
+  background:linear-gradient(90deg,#34d399,#10b981); /* Green Gradient for Action */
+  color:#fff;
+  font-size:1.1rem; 
+  font-weight:600;
+  cursor:pointer;
+  transition:.3s;
+  box-shadow:0 5px 15px rgba(52, 211, 153, 0.5);
+}
+button:hover{
+  transform:translateY(-3px);
+  box-shadow:0 8px 25px rgba(52, 211, 153, 0.7);
+}
+
+.button-join {
+    background: linear-gradient(90deg,#38bdf8,#3b82f6); /* Blue Gradient */
+    box-shadow:0 5px 15px rgba(56,189,248,0.5);
+}
+.button-join:hover {
+    box-shadow:0 8px 25px rgba(56,189,248,0.7);
+}
+

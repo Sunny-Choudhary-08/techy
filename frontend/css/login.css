@@ -1,0 +1,147 @@
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap');
+
+*{margin:0;padding:0;box-sizing:border-box;}
+body{
+  font-family:'Poppins',sans-serif;
+  background: radial-gradient(circle at 25% 30%, #0ea5e9 0%, #0f172a 40%, #020617 100%);
+  height:100vh;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  overflow:hidden;
+  color:white;
+  position:relative;
+}
+
+/* Animated background circles */
+.bg-circle{
+  position:absolute;
+  border-radius:50%;
+  background:rgba(56,189,248,0.15);
+  animation: float 8s ease-in-out infinite;
+}
+.bg-circle.one{width:250px;height:250px;top:-80px;left:-100px;}
+.bg-circle.two{width:350px;height:350px;bottom:-100px;right:-150px;animation-delay:2s;}
+.bg-circle.three{width:180px;height:180px;top:60%;left:60%;animation-delay:1s;}
+@keyframes float{
+  0%,100%{transform:translateY(0);}
+  50%{transform:translateY(20px);}
+}
+
+/* Glass box */
+.login-box{
+  background:rgba(255,255,255,0.08);
+  backdrop-filter:blur(15px);
+  border-radius:25px;
+  padding:50px 40px;
+  width:350px;
+  box-shadow:0 0 30px rgba(56,189,248,0.3);
+  text-align:center;
+  z-index:5;
+  animation:fadeIn 1.2s ease;
+}
+@keyframes fadeIn{
+  from{opacity:0;transform:translateY(40px);}
+  to{opacity:1;transform:translateY(0);}
+}
+
+/* Logo Section */
+.logo{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:12px;
+  margin-bottom:25px;
+}
+.logo-circle{
+  width:60px;height:60px;
+  border-radius:50%;
+  background:linear-gradient(135deg,#38bdf8,#3b82f6);
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 0 20px rgba(56,189,248,0.6);
+  animation:pulse 2s infinite;
+}
+.logo-circle img{
+  width:38px;height:38px;border-radius:50%;
+}
+.logo-text{
+  font-size:1.8rem;
+  font-weight:700;
+}
+.logo-text span{color:#38bdf8;}
+@keyframes pulse{
+  0%,100%{transform:scale(1);}
+  50%{transform:scale(1.1);}
+}
+
+h2{
+  margin-bottom:5px;
+  font-weight:600;
+}
+p{
+  color:#cbd5e1;
+  font-size:.9rem;
+  margin-bottom:30px;
+}
+
+input{
+  width:100%;
+  padding:12px 14px;
+  border:none;
+  border-radius:8px;
+  background:rgba(255,255,255,0.12);
+  color:#fff;
+  margin-bottom:15px;
+  outline:none;
+  font-size:1rem;
+  transition:.3s;
+}
+input:focus{
+  background:rgba(255,255,255,0.18);
+  box-shadow:0 0 10px rgba(56,189,248,0.4);
+}
+
+button{
+  width:100%;
+  padding:12px;
+  border:none;
+  border-radius:10px;
+  background:linear-gradient(90deg,#38bdf8,#3b82f6);
+  color:#fff;
+  font-size:1rem;
+  font-weight:600;
+  cursor:pointer;
+  transition:.3s;
+  box-shadow:0 5px 15px rgba(56,189,248,0.3);
+}
+button:hover{
+  transform:translateY(-3px);
+  box-shadow:0 8px 25px rgba(56,189,248,0.5);
+}
+
+.bottom{
+  margin-top:20px;
+  color:#94a3b8;
+  font-size:.9rem;
+}
+.bottom a{
+  color:#38bdf8;
+  text-decoration:none;
+  font-weight:500;
+  cursor: pointer; /* Change cursor for clickable link */
+}
+.bottom a:hover{text-decoration:underline;}
+
+footer{
+  position:absolute;
+  bottom:20px;
+  color:#94a3b8;
+  font-size:.8rem;
+  letter-spacing:.5px;
+}
+
+/* Modal Styling */
+.modal-overlay {
+    /* Hide the modal overlay completely via CSS */
+    display: none; 
+}

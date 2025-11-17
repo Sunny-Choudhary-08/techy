@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TechMeet — Loading</title>
+  <link rel="stylesheet" href="/frontend/css/splash.css">
+  <style>
+    * {
+      margin: 0; padding: 0; box-sizing: border-box;
+    }
+    body {
+      height: 100vh;
+      background: radial-gradient(circle at 30% 20%, #0ea5e9 0%, #0f172a 40%, #020617 100%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      font-family: "Poppins", sans-serif;
+      color: white;
+    }
+
+    .logo-box {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      animation: fadeIn 2s ease;
+    }
+
+    .logo-circle {
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #38bdf8, #3b82f6);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 0 25px rgba(56,189,248,0.6);
+      animation: pulse 2s infinite;
+    }
+
+    .logo-text {
+      font-size: 2.2rem;
+      font-weight: 700;
+    }
+    .logo-text span {
+      color: #38bdf8;
+    }
+
+    .tagline {
+      margin-top: 12px;
+      font-size: 1.1rem;
+      color: #cbd5e1;
+      animation: slideUp 2s ease forwards;
+    }
+
+    .loader {
+      width: 120px;
+      height: 4px;
+      background: rgba(255,255,255,0.15);
+      border-radius: 2px;
+      margin-top: 40px;
+      overflow: hidden;
+      position: relative;
+    }
+    .loader::before {
+      content: "";
+      position: absolute;
+      width: 40%;
+      height: 100%;
+      background: linear-gradient(90deg,#38bdf8,#818cf8);
+      border-radius: 2px;
+      animation: loadMove 2s infinite;
+    }
+
+    @keyframes loadMove {
+      0% { left: -40%; }
+      50% { left: 100%; }
+      100% { left: -40%; }
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: scale(0.9); }
+      to { opacity: 1; transform: scale(1); }
+    }
+    @keyframes pulse {
+      0%,100% { transform: scale(1); box-shadow: 0 0 25px rgba(56,189,248,0.6); }
+      50% { transform: scale(1.1); box-shadow: 0 0 45px rgba(56,189,248,0.8); }
+    }
+    @keyframes slideUp {
+      0% { opacity: 0; transform: translateY(20px); }
+      100% { opacity: 1; transform: translateY(0); }
+    }
+
+    footer {
+      position: absolute;
+      bottom: 20px;
+      font-size: 13px;
+      color: #94a3b8;
+    }
+  </style>
+</head>
+<body>
+  <div class="logo-box">
+    <div class="logo-circle">
+      <img src="logo.jpg" alt="logo" style="width:50px;height:50px;border-radius:50%;">
+    </div>
+    <div class="logo-text">Tech<span>Meet</span></div>
+  </div>
+  <div class="tagline">Connect Smarter, Work Better</div>
+  <div class="loader"></div>
+
+  <footer>© 2025 TechMeet — powered by HTML, CSS & JS</footer>
+<script>
+  // Wait for animation, then check login
+  setTimeout(() => {
+    const user = localStorage.getItem("zoomUser");
+    if (user) {
+      // If already logged in → go to homepage
+      window.location.href = "honepage.html";
+    } else {
+      // Otherwise → go to login
+      window.location.href = "login.html";
+    }
+  }, 3000);
+</script>
+
+
+ 
+</body>
+</html>

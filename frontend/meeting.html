@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>TechMeet | Meeting</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<link rel="stylesheet" href="css/index.css">
+</head>
+<body>
+
+<header>
+
+  <div class="logo">Tech<span>Meet</span></div>
+
+  <div class="user-info">
+    <img src="logo.jpg" alt="user">
+    <button onclick="logout()">Logout</button>
+  </div>
+</header>
+
+<main>
+  <section class="video-area" id="videos">
+    <div class="video-box" data-user="Sanya (Co-Host)" data-user-id="sanya" id="sanyaVideoBox">
+      <div class="simulated-video">Sanya Video Live</div>
+      
+    </div>
+    </section>
+
+  <aside class="sidebar" id="sidebar">
+    <div class="meeting-code-box" id="hostCodeBox">
+      <p>Meeting Code:</p>
+      <div class="meeting-code" id="meetingCode">#AB12CD</div>
+      <button class="share-btn" onclick="showShareModal(false)">Share/Invite</button>
+    </div>
+
+    <div class="participants" id="hostParticipants">
+      <h3>Participants <span id="participantCount">(Loading...)</span></h3>
+      <ul id="usersList">
+        <li id="hostListItem" class="approved" data-user-id="host">
+          <div class="participant-name-container">You (Host)</div>
+        </li>
+        
+        <li data-status="approved" class="approved" data-user-id="sanya">
+          <div class="participant-name-container">Sanya</div>
+          <div class="participant-actions">
+            <button class="mute-btn" onclick="toggleParticipantMic(this)" data-muted="false" data-user-id="sanya" title="Mute/Unmute">
+                <i class="fa-solid fa-microphone"></i>
+            </button>
+            <button class="kick-btn" onclick="kickUser(this)" data-user-id="sanya" title="Kick/Remove">
+                <i class="fa-solid fa-user-minus"></i>
+            </button>
+          </div>
+        </li>
+
+        <li data-status="pending" data-user-id="rahul">
+          <div class="participant-name-container">Rahul</div>
+          <div class="participant-actions">
+            <button onclick="approveUser(this)">Approve</button>
+            <button class="reject-btn" onclick="rejectUser(this)">Reject</button>
+          </div>
+        </li>
+        <li data-status="pending" data-user-id="ananya">
+          <div class="participant-name-container">Ananya</div>
+          <div class="participant-actions">
+            <button onclick="approveUser(this)">Approve</button>
+            <button class="reject-btn" onclick="rejectUser(this)">Reject</button>
+          </div>
+        </li>
+      </ul>
+    </div>
+    
+    <div class="chat-section" id="chatSection">
+        <div class="chat-header">
+            <h3>Chat</h3>
+            <button class="chat-toggle-btn" onclick="toggleChat()">
+                <i class="fa-solid fa-xmark" id="chatToggleIcon"></i>
+            </button>
+        </div>
+        <div class="chat-box" id="chatBox">
+            <div class="msg sys">Welcome to the chat!</div>
+        </div>
+        <form id="chatForm" class="chatForm">
+            <input type="text" id="chatInput" placeholder="Type a message..." required>
+            <button type="submit"><i class="fa-solid fa-paper-plane"></i></button>
+        </form>
+    </div>
+    </aside>
+</main>
+
+<footer id="footerControls">
+  <div id="recordingTimer"><span class="dot"></span> <span id="timerDisplay">00:00</span></div>
+  <div class="control" id="micControl"><i class="fa-solid fa-microphone"></i></div>
+  <div class="control" id="videoControl"><i class="fa-solid fa-video"></i></div>
+  
+  <div class="control end-call-btn" id="endCallControl"><i class="fa-solid fa-phone-slash"></i></div>
+  <div class="control" id="screenshotBtn"><i class="fa-solid fa-camera"></i></div>
+  <div class="control" id="recordBtn"><i class="fa-solid fa-circle"></i></div>
+</footer>
+
+<div class="popup-overlay hidden" id="shareModal">
+    <div class="popup-box">
+        <span class="close-btn" onclick="hideShareModal()">&times;</span>
+        <h2>Meeting Invitation</h2>
+        <p>Share this code for others to join.</p>
+        <div class="meeting-code" id="modalMeetingCode">#AB12CD</div>
+        <button class="popup-btn" onclick="handleModalAction()">Copy Code</button>
+    </div>
+</div>
+
+<div id="joinNotification" class="toast-notification hidden">
+    <i class="fa-solid fa-check-circle"></i>
+    <span></span>
+</div>
+
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script>
+  // --- Global state variables ---
+  let isMicMuted = false;
+  let isVideoOff = true;
+  let localStream;
+  let recorder, chunks = [], recordingStartTime, recordingTimerInterval;
+  let isChatVisible = true;
+  let isHostMode = true;
+
+  // --- Utility Elements ---
+  const micControl = document.getElementById('micControl');
+  const videoControl = document.getElementById('videoControl');
+  const endCallControl = document.getElementById('endCallControl'); 
+  const recordingTimerDisplay = document.getElementById('timerDisplay');
+  const recordingTimerBox = document.getElementById('recordingTimer');
+  const videoArea = document.getElementById('videos');
+  const participantCountSpan = document.getElementById('participantCount'); 
+  const chatSection = document.getElementById('chatSection'); 
+  const chatToggleIcon = document.getElementById('chatToggleIcon'); 
+  const hostCodeBox = document.getElementById('hostCodeBox');
+  const hostParticipants = document.getElementById('hostParticipants');
+  const screenshotBtn = document.getElementById('screenshotBtn');
+  const recordBtn = document.getElementById('recordBtn');
+
+
+  // --- Initialization ---
+  document.body.style.opacity = 0;
+  
+  const code = Math.random().toString(36).substring(2,8).toUpperCase();
+  // Meeting code display for host
+  if(document.getElementById('meetingCode')) {
+      document.getElementById('meetingCode').textContent = "#" + code;
+  }
+
+
+  window.onload = () => {
+    document.body.style.opacity = 1;
+    const urlParams = new URLSearchParams(window.location.search);
+    const mode = urlParams.get('mode');
+
+    // -------------------------------------------------------------------
+    // 💥 LOGIC FOR HOST vs. JOINER 💥
+    // -------------------------------------------------------------------
+    if (mode === 'join') {
+        isHostMode = false;
+        
+        // 1. Admin/Host specific elements ko chhipao
+        if (hostCodeBox) hostCodeBox.style.display = 'none';
+        if (hostParticipants) hostParticipants.style.display = 'none';
+        if (screenshotBtn) screenshotBtn.style.display = 'none';
+        if (recordBtn) recordBtn.style.display = 'none';
+        
+        // 2. 'Join Meeting' modal immediately dikhao
+        showShareModal(true); 
+
+        // 3. Host's list item aur sample user ko Guest view se remove karein
+        const hostListItem = document.getElementById('hostListItem');
+        if (hostListItem) hostListItem.remove();
+        
+        // Remove Sanya from the video grid in Join mode
+        const sanyaVideoBox = document.getElementById('sanyaVideoBox');
+        if (sanyaVideoBox) sanyaVideoBox.remove();
+        
+        // Remove all list items as guest doesn't need to see the participant list/lobby
+        document.querySelectorAll('#usersList li').forEach(li => li.remove());
+
+    } else {
+        // --- HOST (START) MODE ---
+        isHostMode = true;
+        if (mode === 'start') {
+            showShareModal(false);
+        }
+        
+        // Stream shuru karo (Host controls available)
+        getLocalStream().then(() => {
+            updateMicControl();
+            updateVideoControl(); // Updates UI to muted state
+            updateParticipantCount(); // Initial count update after host is added
+        });
+    }
+  };
+
+  // --- NEW: Participant Count Update (Host Only) ---
+  function updateParticipantCount() {
+      if (!isHostMode) return;
+      // Approved users + Host - Pending (since pending are not technically "active")
+      const activeParticipants = document.querySelectorAll('#usersList li[data-status="approved"], #usersList li[data-user-id="host"]').length;
+      const pendingParticipants = document.querySelectorAll('#usersList li[data-status="pending"]').length;
+      
+      participantCountSpan.textContent = `(${activeParticipants} Active, ${pendingParticipants} Pending)`;
+  }
+  
+  // --- NEW: Chat Toggle Functionality (ALL users) ---
+  function toggleChat() {
+      isChatVisible = !isChatVisible;
+      if (isChatVisible) {
+          chatSection.classList.remove('hidden');
+          chatToggleIcon.className = 'fa-solid fa-xmark'; // Close icon
+      } else {
+          chatSection.classList.add('hidden');
+          chatToggleIcon.className = 'fa-solid fa-comment'; // Open icon
+      }
+  }
+
+
+  // --- End Call Confirmation (ALL users) ---
+  endCallControl.addEventListener('click', () => {
+    const confirmLeave = confirm("Aap sach mein meeting chhodna chahte hain?");
+    if (confirmLeave) {
+        // Stop all local tracks before leaving
+        if (localStream) {
+            localStream.getTracks().forEach(track => track.stop());
+        }
+        // Redirect to logout function
+        logout();
+    }
+  });
+
+
+  // --- Helper Functions ---
+
+  function getLocalStream() {
+    return navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+        .then(stream => {
+            localStream = stream;
+            
+            // Set initial state for tracks
+            localStream.getVideoTracks().forEach(track => track.enabled = !isVideoOff); // Initial OFF
+            localStream.getAudioTracks().forEach(track => track.enabled = !isMicMuted); // Initial ON (default)
+
+            // Display self-view
+            const myVideoBox = document.createElement('div');
+            myVideoBox.className = 'video-box speaking'; 
+            myVideoBox.setAttribute('id', 'myVideoBox');
+            myVideoBox.setAttribute('data-user-id', 'myVideoBox'); // Assign a unique ID to my video
+            myVideoBox.setAttribute('data-user', isHostMode ? 'You (Host)' : 'You (Guest)'); 
+
+            const myVideo = document.createElement('video');
+            myVideo.srcObject = localStream;
+            myVideo.autoplay = true;
+            myVideo.muted = true;
+            
+            // Initial UI visibility based on isVideoOff
+            if (isVideoOff) myVideo.style.visibility = 'hidden';
+
+            myVideoBox.appendChild(myVideo);
+            videoArea.prepend(myVideoBox); 
+        })
+        .catch(err => {
+            console.error("Error accessing media devices: ", err);
+            alert("Could not access your camera and microphone. Please ensure permissions are granted.");
+        });
+  }
+
+  function showNotification(message, type = 'success') {
+    const toast = document.getElementById('joinNotification');
+    const span = toast.querySelector('span');
+    
+    if (type === 'success') {
+        toast.querySelector('i').className = 'fa-solid fa-check-circle';
+        toast.style.background = 'rgba(52, 211, 153, 0.95)';
+    } else if (type === 'error') {
+        toast.querySelector('i').className = 'fa-solid fa-ban';
+        toast.style.background = 'rgba(248, 113, 113, 0.95)'; 
+    } else if (type === 'warning') {
+        toast.querySelector('i').className = 'fa-solid fa-microphone-slash';
+        toast.style.background = 'rgba(251, 191, 36, 0.95)'; 
+    }
+    
+    span.textContent = message;
+    
+    toast.classList.remove('hidden');
+    toast.classList.add('show');
+
+    setTimeout(() => {
+        toast.classList.remove('show');
+        toast.classList.add('hidden');
+    }, 4000);
+  }
+
+  // --- Control Functions (ALL users) ---
+
+  function updateMicControl() {
+      const micIcon = micControl.querySelector('i');
+      const myVideoBox = document.getElementById('myVideoBox');
+      
+      if (isMicMuted) {
+          micIcon.className = 'fa-solid fa-microphone-slash';
+          micControl.classList.add('muted');
+          micControl.classList.remove('active');
+          if (localStream) {
+              localStream.getAudioTracks().forEach(track => track.enabled = false);
+          }
+          if (myVideoBox) myVideoBox.classList.remove('speaking'); 
+
+      } else {
+          micIcon.className = 'fa-solid fa-microphone';
+          micControl.classList.remove('muted');
+          micControl.classList.add('active');
+          if (localStream) {
+              localStream.getAudioTracks().forEach(track => track.enabled = true);
+          }
+          if (myVideoBox) myVideoBox.classList.add('speaking'); 
+      }
+  }
+
+  function updateVideoControl() {
+      const videoIcon = videoControl.querySelector('i');
+      const myVideo = document.querySelector('#myVideoBox video');
+      
+      if (isVideoOff) {
+          videoIcon.className = 'fa-solid fa-video-slash';
+          videoControl.classList.add('muted');
+          videoControl.classList.remove('active');
+          if (localStream) {
+              localStream.getVideoTracks().forEach(track => track.enabled = false);
+              if (myVideo) myVideo.style.visibility = 'hidden';
+          }
+      } else {
+          videoIcon.className = 'fa-solid fa-video';
+          videoControl.classList.remove('muted');
+          videoControl.classList.add('active');
+          if (localStream) {
+              localStream.getVideoTracks().forEach(track => track.enabled = true);
+              if (myVideo) myVideo.style.visibility = 'visible';
+          }
+      }
+  }
+
+  micControl.addEventListener('click', () => {
+      isMicMuted = !isMicMuted;
+      updateMicControl();
+  });
+
+  videoControl.addEventListener('click', () => {
+      isVideoOff = !isVideoOff;
+      updateVideoControl();
+  });
+
+  // --------------------------------------------------------------------
+  // --- Participant Management (Host Only) ---
+  // --------------------------------------------------------------------
+
+  function createParticipantActionButtons(userId) {
+      return `
+          <button class="mute-btn" onclick="toggleParticipantMic(this)" data-muted="false" data-user-id="${userId}" title="Mute/Unmute">
+              <i class="fa-solid fa-microphone"></i>
+          </button>
+          <button class="kick-btn" onclick="kickUser(this)" data-user-id="${userId}" title="Kick/Remove">
+              <i class="fa-solid fa-user-minus"></i>
+          </button>
+      `;
+  }
+
+  function approveUser(btn){
+    if (!isHostMode) return;
+    const li = btn.closest("li");
+    const participantName = li.querySelector(".participant-name-container").textContent.trim();
+    const userId = li.getAttribute('data-user-id');
+
+    li.style.background = "rgba(52,211,153,0.2)";
+    li.querySelector(".participant-name-container").innerHTML = participantName;
+    li.classList.add('approved'); 
+    li.setAttribute('data-status', 'approved'); 
+    
+    // Replace Approve/Reject buttons with Kick/Mute buttons
+    li.querySelector(".participant-actions").innerHTML = createParticipantActionButtons(userId);
+
+    // Dynamic Video Box Creation (UPDATED FOR SIMULATION)
+    const newVideoBox = document.createElement('div');
+    newVideoBox.className = 'video-box';
+    newVideoBox.setAttribute('data-user', participantName);
+    newVideoBox.setAttribute('data-user-id', userId); 
+    newVideoBox.setAttribute('id', userId + 'VideoBox'); // Unique ID for later removal
+    
+    // Simulate Video by adding a placeholder div
+    newVideoBox.innerHTML = `<div class="simulated-video">${participantName} Video Live</div>`;
+    
+    videoArea.appendChild(newVideoBox);
+
+    showNotification(participantName + " meeting me jud gaya hai! 🥳");
+    updateParticipantCount(); 
+  }
+
+  function rejectUser(btn){
+    if (!isHostMode) return;
+    const li = btn.closest("li");
+    const participantName = li.querySelector(".participant-name-container").textContent.trim();
+    
+    li.style.background = "rgba(248,113,113,0.2)";
+    li.querySelector(".participant-name-container").innerHTML = participantName + ' <i class="fa-solid fa-times-circle" style="color:#f87171"></i>';
+    li.querySelector(".participant-actions").remove();
+    li.setAttribute('data-status', 'rejected');
+    
+    showNotification(participantName + " ko entry nahi mili.", 'error');
+
+    updateParticipantCount(); 
+  }
+  
+  // NEW: Kick User Functionality
+  function kickUser(btn) {
+      if (!isHostMode) return;
+      const li = btn.closest("li");
+      const participantName = li.querySelector(".participant-name-container").textContent.trim();
+      const userId = li.getAttribute('data-user-id');
+      
+      if (confirm(`Kya aap ${participantName} ko meeting se nikalna chahte hain?`)) {
+          // 1. Participant List se hatana
+          li.remove();
+          
+          // 2. Video Box hatana (FIXED: Uses dynamic ID)
+          const videoBox = document.getElementById(userId + 'VideoBox');
+          if (videoBox) videoBox.remove();
+          
+          // 3. Notification
+          showNotification(participantName + " ko meeting se nikal diya gaya hai.", 'error');
+          
+          // 4. Count update
+          updateParticipantCount();
+      }
+  }
+
+  // NEW: Mute/Unmute Others Functionality
+  function toggleParticipantMic(btn) {
+      if (!isHostMode) return;
+      const li = btn.closest("li");
+      const participantName = li.querySelector(".participant-name-container").textContent.trim();
+      
+      let isMuted = btn.getAttribute('data-muted') === 'true';
+      
+      if (isMuted) {
+          // Unmute Logic
+          btn.setAttribute('data-muted', 'false');
+          btn.classList.remove('muted');
+          btn.querySelector('i').className = 'fa-solid fa-microphone';
+          showNotification(participantName + " ko unmute kar diya gaya hai.", 'success');
+          
+      } else {
+          // Mute Logic
+          btn.setAttribute('data-muted', 'true');
+          btn.classList.add('muted');
+          btn.querySelector('i').className = 'fa-solid fa-microphone-slash';
+          showNotification(participantName + " ko mute kar diya gaya hai.", 'warning');
+      }
+  }
+
+
+  // --- Recording and Other Utilities (Host Only) ---
+
+  function formatTime(seconds) {
+      const minutes = Math.floor(seconds / 60);
+      const remainingSeconds = seconds % 60;
+      return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
+  }
+
+  function startTimer() {
+      recordingStartTime = Date.now();
+      recordingTimerBox.classList.add('show');
+      recordingTimerInterval = setInterval(() => {
+          const elapsedTime = Math.floor((Date.now() - recordingStartTime) / 1000);
+          recordingTimerDisplay.textContent = formatTime(elapsedTime);
+      }, 1000);
+  }
+
+  function stopTimer() {
+      clearInterval(recordingTimerInterval);
+      recordingTimerBox.classList.remove('show');
+      recordingTimerDisplay.textContent = '00:00';
+  }
+
+  if (document.getElementById('recordBtn')) {
+    document.getElementById('recordBtn').addEventListener('click', async ()=>{
+      if (!isHostMode) return;
+
+      const recordBtn = document.getElementById('recordBtn');
+      const icon = recordBtn.querySelector('i');
+
+      if(!recorder || recorder.state === "inactive"){
+        try{
+            const stream = await navigator.mediaDevices.getDisplayMedia({video:true, audio:true});
+            recorder = new MediaRecorder(stream);
+            chunks = [];
+            recorder.ondataavailable = e => chunks.push(e.data);
+            recorder.onstop = () => {
+              const blob = new Blob(chunks, {type:'video/webm'});
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = 'recording.webm';
+              a.click();
+              icon.style.color = 'white';
+              stopTimer();
+            };
+            recorder.start();
+            icon.style.color = '#f87171';
+            startTimer();
+            alert("Recording started...");
+        } catch(e) {
+            alert("Could not start recording. Permission denied or no display selected.");
+        }
+      } else {
+        recorder.stop();
+        icon.style.color = 'white';
+        alert("Recording stopped! Downloading video...");
+      }
+    });
+  }
+
+  if (document.getElementById('screenshotBtn')) {
+    document.getElementById('screenshotBtn').addEventListener('click', ()=>{
+      if (!isHostMode) return;
+      const blink = document.createElement('div');
+      blink.style.position = 'fixed';
+      blink.style.top = 0; blink.style.left = 0;
+      blink.style.width = '100%'; blink.style.height = '100%';
+      blink.style.background = 'white'; blink.style.opacity = '0';
+      blink.style.zIndex = '1000'; blink.style.pointerEvents = 'none';
+      document.body.appendChild(blink);
+
+      blink.animate([{opacity:0}, {opacity:1}, {opacity:0}], {duration:500}).onfinish = () => {
+        document.body.removeChild(blink);
+        html2canvas(videoArea, {useCORS: true}).then(canvas=>{
+          const link = document.createElement('a');
+          link.download = 'screenshot.png';
+          link.href = canvas.toDataURL();
+          link.click();
+        });
+      };
+    });
+  }
+
+  function logout(){
+    localStorage.removeItem("zoomUser");
+    document.body.style.opacity = 0;
+    setTimeout(()=>window.location.href="login.html",800);
+  }
+  
+  // Meeting code handlers 
+  function handleModalAction() {
+    if (!isHostMode) {
+        // --- JOIN LOGIC ---
+        const enteredCodeElement = document.getElementById('modalMeetingCode');
+        const enteredCode = enteredCodeElement.textContent.trim(); 
+
+        if (enteredCode && enteredCode !== 'Enter Code...' && enteredCode.startsWith('#')) {
+            alert("Joining meeting with code: " + enteredCode);
+            hideShareModal();
+            // Start local stream and full meeting functionality for the guest
+            getLocalStream().then(() => {
+                updateMicControl();
+                updateVideoControl();
+            });
+        } else {
+            alert("Please enter a valid code starting with #.");
+        }
+    } else {
+        // --- HOST LOGIC ---
+        copyCode();
+    }
+  }
+
+  function copyCode(){
+    navigator.clipboard.writeText(code);
+    alert("Meeting code copied: " + "#" + code);
+  }
+  
+  function showShareModal(isJoin = false) {
+    const modal = document.getElementById('shareModal');
+    const h2 = modal.querySelector('h2');
+    const p = modal.querySelector('p');
+    const button = modal.querySelector('.popup-btn');
+    const codeDisplay = document.getElementById('modalMeetingCode');
+    
+    if (isJoin) {
+        h2.textContent = "Meeting Join Karein";
+        p.textContent = "Kripya Meeting Code Daalein:";
+        button.textContent = "Join";
+        // Convert to editable text field for input
+        codeDisplay.textContent = "#"; 
+        codeDisplay.contentEditable = true;
+        codeDisplay.style.cursor = 'text';
+        codeDisplay.focus();
+    } else {
+        h2.textContent = "Meeting Invitation";
+        p.textContent = "Share this code for others to join.";
+        button.textContent = "Copy Code";
+        codeDisplay.textContent = "#" + code;
+        codeDisplay.contentEditable = false;
+        codeDisplay.style.cursor = 'default';
+    }
+    modal.classList.remove('hidden');
+  }
+  
+  function hideShareModal() {
+    document.getElementById('shareModal').classList.add('hidden');
+  }
+
+  // -------------------------------------------------------------------
+  // FIX: CHAT FORM SUBMISSION LOGIC
+  // -------------------------------------------------------------------
+
+  document.getElementById('chatForm').addEventListener('submit', function(event) {
+    // 1. Defualt form submission (page reload) ko rokein
+    event.preventDefault();
+
+    const chatInput = document.getElementById('chatInput');
+    const message = chatInput.value.trim();
+
+    if (message !== "") {
+        // 2. Naya message element banayein
+        const chatBox = document.getElementById('chatBox');
+        const newMsg = document.createElement('div');
+        newMsg.className = 'msg';
+        
+        // Host aur Guest ke liye user name set karein
+        const userName = isHostMode ? 'You (Host)' : 'You (Guest)';
+        newMsg.innerHTML = `<strong>${userName}:</strong> ${message}`;
+        
+        // 3. Message ko chat box mein jod dein
+        chatBox.appendChild(newMsg);
+
+        // 4. Chat box ko niche scroll karein taaki naya message dikhe
+        chatBox.scrollTop = chatBox.scrollHeight;
+
+        // 5. Input field ko khali karein
+        chatInput.value = "";
+    }
+  });
+</script>
+
+</body>
+</html>
