@@ -1,135 +1,227 @@
-// ====== Updated TechMeet Backend - server.js ======
-require('dotenv').config();
-console.log("ENV Loaded?", process.env.MONGO_URI);
+require("dotenv").config();
+const express = require("express");
+const path = require("path");
+const http = require("http");
+const mongoose = require("mongoose");
+const session = require("express-session");
+const MongoStore = require("connect-mongo");
+const passport = require("passport");
+const GoogleStrategy = require("passport-google-oauth20").Strategy;
+const cors = require("cors");
 
-const path = require('path');
-const express = require('express');
-const http = require('http');
-const session = require('express-session');
-const MongoStore = require('connect-mongo');
-const mongoose = require('mongoose');
-const passport = require('passport');
-const GoogleStrategy = require('passport-google-oauth20').Strategy;
-const Room = require('./models/Room');
-const { Server } = require('socket.io');
-const cors = require('cors');
+const User = require("./models/User");
+const History = require("./models/History");
+const Room = require("./models/Room");
 
-// ----- Express & HTTP Server -----
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server, { cors: { origin: true, credentials: true } });
 
-// ----- DB Connection -----
-const MONGO_URI = process.env.MONGO_URI;
-mongoose.connect(MONGO_URI)
-  .then(() => console.log('MongoDB Connected'))
-  .catch(err => console.error('MongoDB Error:', err));
+app.use(express.json());
+app.use(cors({ origin: true, credentials: true }));
 
-// ----- Session Middleware -----
+/* ------------------------------------------------------
+   MONGODB
+------------------------------------------------------ */
+mongoose
+  .connect(process.env.MONGO_URI)
+  .then(() => console.log("MongoDB Connected ✔"))
+  .catch(err => console.log("MongoDB Error:", err));
+
+/* ------------------------------------------------------
+   SESSION
+------------------------------------------------------ */
 const sessionMiddleware = session({
-  secret: process.env.SESSION_SECRET || "mysecret",
+  secret: process.env.SESSION_SECRET || "supersecret",
   resave: false,
   saveUninitialized: false,
   store: MongoStore.create({
-    mongoUrl: MONGO_URI,
-    dbName: "TechMeetDB",
-    collectionName: "sessions",
-    ttl: 14 * 24 * 60 * 60  // 14 days
+    mongoUrl: process.env.MONGO_URI,
   }),
-  cookie: {
-    maxAge: 1000 * 60 * 60 * 24,  // 1 day
-    httpOnly: true,
-    secure: false
-  }
+  cookie: { maxAge: 1000 * 60 * 60 * 24 }
 });
 
 app.use(sessionMiddleware);
 app.use(passport.initialize());
 app.use(passport.session());
-app.use(express.json());
-app.use(cors({ origin: true, credentials: true }));
 
-// ----- Passport Google Auth Setup -----
+/* ------------------------------------------------------
+   PASSPORT SERIALIZATION
+------------------------------------------------------ */
 passport.serializeUser((user, done) => done(null, user));
-passport.deserializeUser((obj, done) => done(null, obj));
+passport.deserializeUser((user, done) => done(null, user));
 
-passport.use(new GoogleStrategy({
-  clientID: process.env.GOOGLE_CLIENT_ID,
-  clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-  callbackURL: process.env.GOOGLE_CALLBACK
-}, (accessToken, refreshToken, profile, done) => {
-  const user = {
-    id: profile.id,
-    displayName: profile.displayName,
-    email: profile.emails?.[0]?.value || null
-  };
-  done(null, user);
-}));
+/* ------------------------------------------------------
+   AUTO-GENERATE UNIQUE USERNAME
+------------------------------------------------------ */
+async function generateUniqueUsername(base) {
+  let username = base.toLowerCase().replace(/\s+/g, "");
+  let exists = await User.findOne({ username });
 
-// ----- Serve Frontend -----
-app.use(express.static(path.join(__dirname, "../frontend")));
+  let counter = 1;
+  while (exists) {
+    username = `${base}_${counter}`;
+    exists = await User.findOne({ username });
+    counter++;
+  }
+  return username;
+}
 
+/* ------------------------------------------------------
+   GOOGLE LOGIN STRATEGY
+------------------------------------------------------ */
+passport.use(
+  new GoogleStrategy(
+    {
+      clientID: process.env.GOOGLE_CLIENT_ID,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+      callbackURL: process.env.GOOGLE_CALLBACK
+    },
+    async (accessToken, refreshToken, profile, done) => {
+      const email = profile.emails?.[0]?.value;
 
-// ----- Auth Routes -----
-app.get('/auth/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
+      let user = await User.findOne({ googleId: profile.id });
 
-app.get('/auth/google/callback',
-  passport.authenticate('google', { failureRedirect: '/' }),
-  (req, res) => res.redirect('/')
+      if (!user) {
+        let baseUsername =
+          email ? email.split("@")[0] : profile.displayName.replace(/\s+/g, "");
+
+        const username = await generateUniqueUsername(baseUsername);
+
+        user = await User.create({
+          googleId: profile.id,
+          name: profile.displayName,
+          email: email,
+          username: username
+        });
+      }
+
+      return done(null, {
+        id: user._id.toString(),
+        name: user.name,
+        email: user.email
+      });
+    }
+  )
 );
 
-app.get('/auth/logout', (req, res) => {
-  req.logout?.(() => {});
-  req.session.destroy(() => {
-    res.clearCookie('connect.sid');
-    res.redirect('/');
-  });
-});
-
-// --- API: Current User ---
-app.get('/api/me', (req, res) => {
-  if (req.user) return res.json({ user: req.user });
-  res.status(401).json({ error: 'not authenticated' });
-});
-
-// --- API: Create Room ---
-app.post('/api/rooms', async (req, res) => {
+/* ------------------------------------------------------
+   SIGNUP (AUTO USERNAME FIXED)
+------------------------------------------------------ */
+app.post("/api/signup", async (req, res) => {
   try {
-    const { code, hostId } = req.body;
-    if (!code) return res.json({ ok: false, error: 'code required' });
+    const { name, username, email, password } = req.body;
 
-    const exists = await Room.findOne({ code });
-    if (exists) return res.json({ ok: false, error: 'Room already exists' });
+    if (!name || !username || !password)
+      return res.json({ ok: false, error: "Missing required fields" });
 
-    const room = new Room({ code, hostId, isActive: true, participants: [] });
-    await room.save();
+    let finalUsername = await generateUniqueUsername(username);
 
-    res.json({ ok: true, code });
+    const existsEmail = email ? await User.findOne({ email }) : null;
+    if (existsEmail)
+      return res.json({ ok: false, error: "Email already exists" });
+
+    const user = await User.create({
+      name,
+      username: finalUsername,
+      email,
+      password
+    });
+
+    req.login(
+      {
+        id: user._id.toString(),
+        name: user.name,
+        email: user.email
+      },
+      () => res.json({ ok: true })
+    );
   } catch (err) {
     res.json({ ok: false, error: err.message });
   }
 });
 
-// --- API: Check Room Exists ---
-app.get('/api/rooms/:code', async (req, res) => {
+/* ------------------------------------------------------
+   LOGIN
+------------------------------------------------------ */
+app.post("/api/login", async (req, res) => {
   try {
-    const room = await Room.findOne({ code: req.params.code });
-    res.json({ exists: !!room, isActive: room?.isActive ?? false });
+    const { usernameOrEmail, password } = req.body;
+
+    const user = await User.findOne({
+      $or: [{ username: usernameOrEmail }, { email: usernameOrEmail }]
+    });
+
+    if (!user) return res.json({ ok: false, error: "User not found" });
+    if (user.password !== password)
+      return res.json({ ok: false, error: "Incorrect password" });
+
+    req.login(
+      {
+        id: user._id.toString(),
+        name: user.name,
+        email: user.email
+      },
+      () => res.json({ ok: true })
+    );
+
   } catch (err) {
-    res.json({ exists: false });
+    res.json({ ok: false, error: err.message });
   }
 });
 
-// --- API: End Room ---
-app.post('/api/rooms/:code/end', async (req, res) => {
+/* ------------------------------------------------------
+   GOOGLE ROUTES
+------------------------------------------------------ */
+app.get(
+  "/auth/google",
+  passport.authenticate("google", {
+    scope: ["profile", "email"],
+    prompt: "select_account"
+  })
+);
+
+app.get(
+  "/auth/google/callback",
+  passport.authenticate("google", { failureRedirect: "/" }),
+  (req, res) => res.redirect("/")
+);
+
+/* ------------------------------------------------------
+   LOGOUT
+------------------------------------------------------ */
+app.get("/api/logout", (req, res) => {
+  req.logout(() => {
+    req.session.destroy(() => {
+      res.clearCookie("connect.sid");
+      res.json({ ok: true });
+    });
+  });
+});
+
+/* ------------------------------------------------------
+   CURRENT USER
+------------------------------------------------------ */
+app.get("/api/me", (req, res) => {
+  if (!req.user) return res.status(401).json({ error: "Not logged in" });
+  res.json({ user: req.user });
+});
+
+/* ------------------------------------------------------
+   SAVE MEETING HISTORY
+------------------------------------------------------ */
+app.post("/api/history", async (req, res) => {
   try {
-    const room = await Room.findOne({ code: req.params.code });
-    if (!room) return res.json({ ok: false, error: 'not found' });
+    if (!req.user)
+      return res.status(401).json({ ok: false, error: "Not logged in" });
 
-    room.isActive = false;
-    await room.save();
+    const { meetingCode, action } = req.body;
 
-    io.to(req.params.code).emit('room-ended', { room: req.params.code });
+    await History.create({
+      userId: req.user.id,
+      meetingCode,
+      action,
+      timestamp: new Date()
+    });
 
     res.json({ ok: true });
   } catch (err) {
@@ -137,91 +229,33 @@ app.post('/api/rooms/:code/end', async (req, res) => {
   }
 });
 
-// ----- Socket.io + Rooms + Mongoose -----
-io.use((socket, next) => {
-  sessionMiddleware(socket.request, {}, next);
+/* ------------------------------------------------------
+   GET HISTORY
+------------------------------------------------------ */
+app.get("/api/history", async (req, res) => {
+  if (!req.user)
+    return res.status(401).json({ ok: false, error: "Not logged in" });
+
+  const history = await History.find({ userId: req.user.id }).sort({
+    timestamp: -1
+  });
+
+  res.json({ ok: true, history });
 });
 
-io.on('connection', (socket) => {
-  console.log('Socket Connected:', socket.id);
+/* ------------------------------------------------------
+   STATIC FILES
+------------------------------------------------------ */
+app.use(express.static(path.join(__dirname, "..", "frontend")));
 
-  // JOIN ROOM
-  socket.on('join-room', async ({ room, user }) => {
-    try {
-      if (!room || !user) return;
-      socket.join(room);
-
-      let roomDoc = await Room.findOne({ code: room });
-      if (!roomDoc) {
-        roomDoc = new Room({ code: room, hostId: user.id, isActive: true, participants: [] });
-      }
-
-      if (!roomDoc.participants.some((p) => p.id === user.id)) {
-        roomDoc.participants.push({ id: user.id, username: user.username });
-        await roomDoc.save();
-      }
-
-      socket.emit('existing-participants', {
-        room,
-        participants: roomDoc.participants,
-        hostId: roomDoc.hostId
-      });
-
-      socket.to(room).emit('new-participant', {
-        id: user.id,
-        username: user.username
-      });
-
-    } catch (err) {
-      console.error('join-room error:', err);
-    }
-  });
-
-  // LEAVE ROOM
-  socket.on('leave-room', async ({ room, userId }) => {
-    try {
-      socket.leave(room);
-
-      const roomDoc = await Room.findOne({ code: room });
-      if (roomDoc) {
-        roomDoc.participants = roomDoc.participants.filter((p) => p.id !== userId);
-
-        if (roomDoc.participants.length === 0) roomDoc.isActive = false;
-
-        await roomDoc.save();
-      }
-
-      socket.to(room).emit('participant-left', { id: userId });
-    } catch (err) {
-      console.error('leave-room error:', err);
-    }
-  });
-
-  // WEBRTC SIGNALING
-  socket.on('offer', ({ room, offer, fromInfo }) => {
-    socket.to(room).emit('offer', { fromInfo, offer });
-  });
-
-  socket.on('answer', ({ room, answer, fromInfo }) => {
-    socket.to(room).emit('answer', { fromInfo, answer });
-  });
-
-  socket.on('ice-candidate', ({ room, candidate, fromInfo }) => {
-    socket.to(room).emit('ice-candidate', { fromInfo, candidate });
-  });
-
-  socket.on('chat', ({ room, username, message }) => {
-    io.to(room).emit('chat-message', { username, message });
-  });
-
-  socket.on('end-room', async ({ room }) => {
-    io.to(room).emit('room-ended', { room });
-    await Room.findOneAndUpdate({ code: room }, { isActive: false });
-  });
-
-  socket.on('disconnect', () => console.log('Socket Disconnected:', socket.id));
+app.get("*", (req, res) => {
+  res.sendFile(path.join(__dirname, "..", "frontend", "index.html"));
 });
 
-// ----- Start Server -----
+/* ------------------------------------------------------
+   START
+------------------------------------------------------ */
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log('Server listening on', PORT));
+server.listen(PORT, () =>
+  console.log(`Server running on port ${PORT}`)
+);

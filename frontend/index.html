@@ -1,93 +1,330 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>TechMeet – Start or Join Meeting</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>TechMeet – Start or Join Meeting</title>
 
-    <!-- Google Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
-    <!-- Icons -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
+  <!-- Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
 
-    <!-- NEW Landing Page CSS -->
-    <link rel="stylesheet" href="css/home.css" />
+  <!-- Home Page CSS -->
+  <link rel="stylesheet" href="css/home.css" />
+
+  <!-- LOGIN & SIGNUP POPUP CSS -->
+  <style>
+/* OVERLAY */
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.7);
+    backdrop-filter: blur(7px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+}
+
+/* MODAL BOX */
+.modal {
+    width: 430px;
+    background: rgba(10,15,25,0.95);
+    border-radius: 16px;
+    padding: 32px;
+    border: 1px solid rgba(255,255,255,0.08);
+}
+
+.modal h3 {
+    text-align: center;
+    font-size: 24px;
+    color: #fff;
+    margin-bottom: 25px;
+}
+
+/* INPUT */
+.modal input {
+    width: 100%;
+    padding: 12px 14px;
+    margin-bottom: 15px;
+    border-radius: 10px;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.12);
+    color: #fff;
+}
+
+/* BUTTONS */
+.btn-primary {
+    padding: 10px 22px;
+    background: linear-gradient(90deg,#2de3a3,#10b981);
+    border: none;
+    color: #062016;
+    border-radius: 8px;
+    cursor: pointer;
+}
+.btn-ghost {
+    padding: 10px 20px;
+    background: transparent;
+    border: 1px solid rgba(255,255,255,0.2);
+    color: #cfe1ef;
+    border-radius: 8px;
+    cursor: pointer;
+}
+
+/* GOOGLE BUTTON */
+.btn-google {
+    width: 100%;
+    padding: 10px;
+    margin-top: 12px;
+    border-radius: 10px;
+    background: rgba(255,255,255,0.12);
+    border: 1px solid rgba(255,255,255,0.25);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    cursor: pointer;
+}
+  </style>
 </head>
 
 <body>
 
-    <!-- Header -->
-    <header class="topbar">
-        <div class="logo">Tech<span>Meet</span></div>
-        <div class="top-right">
-            <button id="loginBtn" class="login-btn">Login</button>
+<!-- HEADER -->
+<header class="topbar">
+    <div class="logo">Tech<span>Meet</span></div>
+
+    <div id="navActions">
+        <button id="loginBtn" class="login-btn">Login</button>
+        <button id="signupOpenBtn" class="login-btn">Sign up</button>
+    </div>
+</header>
+
+<!-- HERO SECTION -->
+<section class="hero">
+
+    <div class="hero-left">
+        <h1 class="headline">Connect. Collaborate. <span>Meet.</span></h1>
+
+        <p class="subtext">Host high-quality meetings and collaborate instantly.</p>
+
+        <!-- NEW ACTION BUTTON LAYOUT -->
+        <div class="actions">
+
+            <!-- START MEETING -->
+            <button id="startMeetingBtn" class="btn primary">
+                <i class="fa-solid fa-video"></i> Start New Meeting
+            </button>
+
+            <!-- JOIN MEETING BUTTON -->
+            <button id="openJoinModal" class="btn secondary">
+                <i class="fa-solid fa-right-to-bracket"></i> Join Meeting
+            </button>
+
         </div>
-    </header>
+    </div>
 
-    <!-- Main Landing Section -->
-    <section class="hero">
+    <div class="hero-right">
+        <div class="logo-card">
+            <img src="logo.jpg" alt="">
+            <div class="logo-caption">Next-Gen Video Meetings</div>
+        </div>
+    </div>
 
-        <div class="hero-left">
-            <h1 class="headline">
-                Connect. Collaborate. <span>Meet.</span>
-            </h1>
+</section>
 
-            <p class="subtext">
-                Host high-quality meetings, collaborate in real-time, and stay connected with your team — all in one place.
-            </p>
+<footer class="footer">
+    © 2025 TechMeet — All Rights Reserved
+</footer>
 
-            <div class="actions">
-                <button id="startMeetingBtn" class="btn primary">
-                    <i class="fa-solid fa-video"></i> Start New Meeting
-                </button>
+<!-- SIGNUP MODAL -->
+<div id="signupModal" class="modal-overlay" style="display:none;">
+    <div class="modal">
+        <h3>Create Account</h3>
 
-                <div class="join-box">
-                    <input type="text" id="meetingCodeInput" maxlength="6" placeholder="Enter code" />
-                    <button id="joinMeetingBtn" class="btn secondary">
-                        <i class="fa-solid fa-arrow-right-to-bracket"></i>
-                    </button>
-                </div>
-            </div>
+        <input id="su_name" placeholder="Full Name">
+        <input id="su_username" placeholder="Username">
+        <input id="su_email" placeholder="Email">
+        <input id="su_password" type="password" placeholder="Password">
+
+        <div id="signupGoogle" class="btn-google">
+            <i class="fa-brands fa-google"></i> Sign up with Google
         </div>
 
-        <div class="hero-right">
-    <div class="logo-card">
-        <img src="logo.jpg" alt="TechMeet Logo">
-        <div class="logo-caption">Next-Gen Video Meetings</div>
+        <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:12px;">
+            <button id="su_cancel" class="btn-ghost">Cancel</button>
+            <button id="su_submit" class="btn-primary">Create</button>
+        </div>
+
+        <p id="su_msg" style="color:#ef4444;margin-top:8px;"></p>
     </div>
 </div>
 
+<!-- LOGIN MODAL -->
+<div id="loginModal" class="modal-overlay" style="display:none;">
+    <div class="modal">
+        <h3>Login</h3>
 
+        <input id="li_user" placeholder="Username or Email">
+        <input id="li_pass" type="password" placeholder="Password">
 
-    </section>
+        <div id="loginGoogle" class="btn-google">
+            <i class="fa-brands fa-google"></i> Login with Google
+        </div>
 
-    <footer class="footer">
-        <p>© 2025 TechMeet • All Rights Reserved</p>
-    </footer>
+        <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:12px;">
+            <button id="li_cancel" class="btn-ghost">Cancel</button>
+            <button id="li_submit" class="btn-primary">Login</button>
+        </div>
 
-    <!-- JS -->
-    <script>
-        // Start Meeting
-        document.getElementById("startMeetingBtn").onclick = () => {
-            window.location.href = "meeting.html?mode=start";
-        };
+        <p id="li_msg" style="color:#ef4444;margin-top:8px;"></p>
+    </div>
+</div>
 
-        // Join Meeting
-        document.getElementById("joinMeetingBtn").onclick = () => {
-            const code = document.getElementById("meetingCodeInput").value.trim().toUpperCase();
-            if (code.length !== 6) {
-                alert("Please enter a valid 6-digit meeting code.");
-                return;
-            }
-            window.location.href = `meeting.html?mode=join&code=${code}`;
-        };
+<!-- JOIN MEETING MODAL -->
+<div id="joinModal" class="modal-overlay" style="display:none;">
+    <div class="modal">
+        <h3>Join Meeting</h3>
 
-        // Login (optional future use)
-        document.getElementById("loginBtn").onclick = () => {
-            window.location.href = "login.html";
-        };
-    </script>
+        <input id="join_code_input" maxlength="6" placeholder="Enter meeting code">
+
+        <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:12px;">
+            <button id="join_cancel" class="btn-ghost">Cancel</button>
+            <button id="join_confirm" class="btn-primary">Join</button>
+        </div>
+
+        <p id="join_msg" style="color:#ef4444;margin-top:8px;"></p>
+    </div>
+</div>
+
+<!-- JS LOGIC -->
+<script>
+/* ---------- MODAL CONTROL ---------- */
+const signupModal = document.getElementById("signupModal");
+const loginModal  = document.getElementById("loginModal");
+const joinModal   = document.getElementById("joinModal");
+
+signupOpenBtn.onclick = () => signupModal.style.display = "flex";
+loginBtn.onclick      = () => loginModal.style.display = "flex";
+openJoinModal.onclick = () => joinModal.style.display = "flex";
+
+su_cancel.onclick = () => signupModal.style.display = "none";
+li_cancel.onclick = () => loginModal.style.display = "none";
+join_cancel.onclick = () => joinModal.style.display = "none";
+
+/* ---------- SIGNUP ---------- */
+su_submit.onclick = async () => {
+    const body = {
+        name: su_name.value.trim(),
+        username: su_username.value.trim(),
+        email: su_email.value.trim(),
+        password: su_password.value
+    };
+
+    const res = await fetch("/api/signup", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+    });
+
+    const data = await res.json();
+    if (data.ok) {
+        signupModal.style.display = "none";
+        loadUser();
+    } else su_msg.textContent = data.error;
+};
+
+/* ---------- LOGIN ---------- */
+li_submit.onclick = async () => {
+    const body = {
+        usernameOrEmail: li_user.value.trim(),
+        password: li_pass.value
+    };
+
+    const res = await fetch("/api/login", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+    });
+
+    const data = await res.json();
+    if (data.ok) {
+        loginModal.style.display = "none";
+        loadUser();
+    } else li_msg.textContent = data.error;
+};
+
+/* ---------- GOOGLE AUTH ---------- */
+signupGoogle.onclick = () => window.location.href = "/auth/google";
+loginGoogle.onclick  = () => window.location.href = "/auth/google";
+
+/* ---------- LOAD NAVBAR USER ---------- */
+async function loadUser() {
+    const nav = document.getElementById("navActions");
+
+    const res = await fetch("/api/me", { credentials:"include" });
+
+    if (res.status === 200) {
+        const { user } = await res.json();
+
+        nav.innerHTML = `
+            <span class="user-name">Hi, ${user.name}</span>
+            <button id="historyBtn" class="nav-btn"><i class="fa-solid fa-clock"></i> History</button>
+            <button id="helpBtn" class="nav-btn"><i class="fa-solid fa-circle-question"></i> Help</button>
+            <button id="logoutBtn" class="logout-btn">Logout</button>
+        `;
+    } else {
+        nav.innerHTML = `
+            <button id="loginBtn" class="login-btn">Login</button>
+            <button id="signupOpenBtn" class="login-btn">Sign up</button>
+        `;
+    }
+}
+
+/* ---------- SAVE HISTORY ---------- */
+async function recordHistory(meetingCode, action) {
+    try {
+        await fetch("/api/history", {
+            method: "POST",
+            credentials:"include",
+            headers: { "Content-Type":"application/json" },
+            body: JSON.stringify({ meetingCode, action })
+        });
+    } catch(err) {
+        console.log("History error:", err);
+    }
+}
+
+/* ---------- START MEETING ---------- */
+startMeetingBtn.onclick = async () => {
+    const code = Math.random().toString(36).substring(2, 8).toUpperCase();
+
+    await recordHistory(code, "started");
+
+    window.location.href = `meeting.html?mode=start&code=${code}`;
+};
+
+/* ---------- JOIN MEETING CONFIRM ---------- */
+join_confirm.onclick = async () => {
+    const code = join_code_input.value.trim().toUpperCase();
+
+    if (code.length !== 6) {
+        join_msg.textContent = "Enter a valid 6-digit code";
+        return;
+    }
+
+    await recordHistory(code, "joined");
+    window.location.href = `meeting.html?mode=join&code=${code}`;
+};
+
+/* Load navbar on page open */
+loadUser();
+</script>
 
 </body>
 </html>

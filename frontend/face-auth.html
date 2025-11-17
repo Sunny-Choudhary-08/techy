@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Face Authentication</title>
+  <style>
+    video { width: 280px; border: 2px solid black; border-radius: 10px; }
+  </style>
+</head>
+<body>
+  <h2>Face Authentication Required</h2>
+
+  <video id="video" autoplay muted></video>
+  <p id="status">Loading...</p>
+
+  <button onclick="authenticateUser()">Authenticate</button>
+
+  <script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api/dist/face-api.min.js"></script>
+
+  <script>
+    const MODEL_URL = "/models/face/";
+
+    async function startCamera(){
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      document.getElementById("video").srcObject = stream;
+    }
+
+    async function loadModels(){
+      await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
+      await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
+      await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
+      document.getElementById("status").innerText = "Models Loaded";
+    }
+
+    async function getEmbedding(){
+      const video = document.getElementById("video");
+      const det = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
+                    .withFaceLandmarks()
+                    .withFaceDescriptor();
+      if(!det) throw new Error("Face not detected!");
+      return Array.from(det.descriptor);
+    }
+
+    async function authenticateUser(){
+      try {
+        document.getElementById("status").innerText = "Verifying...";
+        const embedding = await getEmbedding();
+
+        const res = await fetch("http://localhost:3000/api/face/auth", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ embedding })
+        });
+
+        const data = await res.json();
+
+        if(data.success){
+          document.getElementById("status").innerText = "Authenticated ✔ Redirecting...";
+          setTimeout(() => {
+            window.location.href = "/meeting.html";
+          }, 1000);
+        } else {
+          document.getElementById("status").innerText = "Authentication Failed ❌";
+        }
+      }
+      catch(err){
+        document.getElementById("status").innerText = err.message;
+      }
+    }
+
+    loadModels();
+    startCamera();
+  </script>
+</body>
+</html>

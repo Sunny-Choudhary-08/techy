@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>History — TechMeet</title>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="css/home.css" />
+  <style>
+    .history-container { max-width:980px; margin: 40px auto; padding: 20px; }
+    .history-card { background: rgba(255,255,255,0.03); border-radius: 12px; padding: 14px 16px; margin-bottom: 12px; display:flex; justify-content:space-between; align-items:center; }
+    .history-left { display:flex; gap:12px; align-items:center; }
+    .code-bubble { background: rgba(56,189,248,0.12); border:1px solid rgba(56,189,248,0.18); padding:8px 12px; border-radius:8px; font-weight:700; color:var(--accent); }
+    .history-meta { color: var(--muted); font-size: 13px; }
+    .btn-small { padding:8px 12px; border-radius:8px; border:none; cursor:pointer; }
+    .btn-join { background:linear-gradient(90deg,var(--primary),#0dbb7b); color:#022; }
+    .empty { text-align:center; color:var(--muted); padding:40px 0; }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="logo">Tech<span>Meet</span></div>
+    <div class="top-right" id="navActionsHistory">
+      <button onclick="location.href='index.html'" class="login-btn">Home</button>
+      <button id="logoutBtn" class="logout-btn">Logout</button>
+    </div>
+  </header>
+
+  <main class="history-container" id="historyContainer" style="padding-top:100px;">
+    <h2 style="margin-bottom:18px;">Recent meetings</h2>
+    <div id="historyList"></div>
+  </main>
+
+  <script>
+    async function fetchHistory() {
+      const res = await fetch('/api/history', { credentials: 'include' });
+      const out = await res.json();
+      const list = document.getElementById('historyList');
+      list.innerHTML = '';
+      if (!out.ok || !out.items || out.items.length === 0) {
+        list.innerHTML = '<div class="empty">No recent meetings found.</div>';
+        return;
+      }
+
+      out.items.forEach(item => {
+        const d = new Date(item.createdAt);
+        const time = d.toLocaleString();
+        const node = document.createElement('div');
+        node.className = 'history-card';
+        node.innerHTML = `
+          <div class="history-left">
+            <div class="code-bubble">${item.meetingCode}</div>
+            <div>
+              <div style="font-weight:600;">${item.action.charAt(0).toUpperCase() + item.action.slice(1)}</div>
+              <div class="history-meta">${time} • ${item.title || ''}</div>
+            </div>
+          </div>
+          <div>
+            <button class="btn-small btn-join" onclick="goToMeeting('${item.meetingCode}')">Join</button>
+          </div>
+        `;
+        list.appendChild(node);
+      });
+    }
+
+    function goToMeeting(code) {
+      // optionally record that user re-joined history item
+      fetch('/api/history', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ meetingCode: code, action: 'joined', title: 'Rejoined from history' })
+      }).finally(() => {
+        window.location.href = `meeting.html?mode=join&code=${code}`;
+      });
+    }
+
+    // wire logout button
+    document.getElementById('logoutBtn').onclick = async () => {
+      await fetch('/api/logout', { credentials: 'include' });
+      window.location.href = '/';
+    };
+
+    fetchHistory();
+  </script>
+</body>
+</html>
