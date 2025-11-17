@@ -1,0 +1,464 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>TechMeet — WebRTC Demo</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="/socket.io/socket.io.js"></script>
+</head>
+<body>
+  <header class="header">
+    <div class="brand">Tech<span>Meet</span></div>
+    <div id="user-area" class="user-area">
+      <span id="usernameDisplay">Not signed in</span>
+      <a id="signinBtn" class="btn" href="/auth/google">Sign in with Google</a>
+      <button id="signoutBtn" class="btn hidden">Sign out</button>
+    </div>
+  </header>
+
+  <main class="main">
+    <section class="lobby" id="lobby">
+      <div class="card">
+        <h2>Create or Join</h2>
+        <div class="row">
+          <input id="createName" type="text" placeholder="Your display name (optional)"/>
+          <button id="createBtn" class="primary">Create Meeting</button>
+        </div>
+
+        <div class="row">
+          <input id="joinCode" type="text" placeholder="Enter meeting code (6 chars)" maxlength="6"/>
+          <button id="joinBtn" class="primary">Join Meeting</button>
+        </div>
+
+        <p class="muted">Tip: use Chrome/Edge for best WebRTC support. This demo uses a simple mesh (peer-to-peer) network — works for small groups.</p>
+      </div>
+    </section>
+
+    <section id="meeting" class="hidden">
+      <div class="meeting-header">
+        <div>
+          <strong>Meeting Code: </strong><span id="meetingCode">-</span>
+        </div>
+        <div class="meeting-actions">
+          <button id="leaveBtn" class="danger">Leave</button>
+          <button id="endBtn" class="danger hidden">End (Host)</button>
+        </div>
+      </div>
+
+      <div class="content">
+        <div id="videos" class="videos">
+          <!-- video boxes inserted here -->
+        </div>
+
+        <aside class="sidebar">
+          <div class="card">
+            <h3>Participants</h3>
+            <ul id="participantsList"></ul>
+          </div>
+
+          <div class="card chat">
+            <h3>Chat</h3>
+            <div id="chatBox" class="chatBox"></div>
+            <form id="chatForm" class="chatForm">
+              <input id="chatInput" placeholder="Type a message..." required />
+              <button type="submit">Send</button>
+            </form>
+          </div>
+        </aside>
+      </div>
+    </section>
+  </main>
+
+<script>
+/* ==========================
+   Client-side WebRTC + Socket.io
+   ==========================
+   - Sign-in is handled by backend via Google OAuth.
+   - After sign-in, frontend fetches /api/me to get user info.
+   - Socket.io signaling events:
+      join-room (server), existing-participants (server), new-participant (server->clients)
+      offer, answer, ice-candidate (peer signaling)
+   - This is a SIMPLE mesh implementation: each participant PeerConnection -> each other participant.
+   - Works for small groups (<=6). Scale requires SFU (e.g. mediasoup, Janus).
+*/
+
+const socket = io();
+
+// UI elements
+const signinBtn = document.getElementById('signinBtn');
+const signoutBtn = document.getElementById('signoutBtn');
+const usernameDisplay = document.getElementById('usernameDisplay');
+const createBtn = document.getElementById('createBtn');
+const createName = document.getElementById('createName');
+const joinBtn = document.getElementById('joinBtn');
+const joinCodeInput = document.getElementById('joinCode');
+const leaveBtn = document.getElementById('leaveBtn');
+const endBtn = document.getElementById('endBtn');
+
+const lobby = document.getElementById('lobby');
+const meetingSection = document.getElementById('meeting');
+const meetingCodeEl = document.getElementById('meetingCode');
+const videos = document.getElementById('videos');
+const participantsList = document.getElementById('participantsList');
+
+const chatForm = document.getElementById('chatForm');
+const chatBox = document.getElementById('chatBox');
+const chatInput = document.getElementById('chatInput');
+
+// App state
+let localStream = null;
+let peerConnections = {}; // peerId -> RTCPeerConnection
+let participants = {}; // peerId -> { username }
+let currentRoom = null;
+let isHost = false;
+let me = null; // { id, displayName, email }
+
+// STUN servers (public)
+const STUN_SERVERS = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+
+// ---- Helpers ----
+function setUser(user) {
+  me = user;
+  if (!me) {
+    usernameDisplay.textContent = 'Not signed in';
+    signinBtn.classList.remove('hidden');
+    signoutBtn.classList.add('hidden');
+  } else {
+    usernameDisplay.textContent = me.displayName || me.email || 'User';
+    signinBtn.classList.add('hidden');
+    signoutBtn.classList.remove('hidden');
+    createName.value = me.displayName || '';
+  }
+}
+
+async function fetchMe() {
+  try {
+    const res = await fetch('/api/me', { credentials: 'same-origin' });
+    if (res.status === 200) {
+      const data = await res.json();
+      setUser(data.user || null);
+    } else setUser(null);
+  } catch (e) {
+    setUser(null);
+  }
+}
+
+function createCode() {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  let code = '';
+  for (let i=0;i<6;i++) code += chars.charAt(Math.floor(Math.random()*chars.length));
+  return code;
+}
+
+// ---- UI updates ----
+function showMeetingUI(code) {
+  lobby.classList.add('hidden');
+  meetingSection.classList.remove('hidden');
+  meetingCodeEl.textContent = code;
+}
+
+function showLobbyUI() {
+  lobby.classList.remove('hidden');
+  meetingSection.classList.add('hidden');
+  meetingCodeEl.textContent = '-';
+  clearAll();
+}
+
+function appendChatMessage(author, text, isSystem=false) {
+  const el = document.createElement('div');
+  el.className = 'chatMsg';
+  if (isSystem) {
+    el.innerHTML = '<em>' + text + '</em>';
+  } else {
+    el.innerHTML = `<strong>${escapeHtml(author)}:</strong> ${escapeHtml(text)}`;
+  }
+  chatBox.appendChild(el);
+  chatBox.scrollTop = chatBox.scrollHeight;
+}
+
+// small escape to avoid XSS
+function escapeHtml(s) {
+  if (!s) return '';
+  return s.replace(/[&<>"]/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+}
+
+// ---- Media ----
+async function ensureLocalStream() {
+  if (localStream) return localStream;
+  try {
+    localStream = await navigator.mediaDevices.getUserMedia({video: true, audio: true});
+    // add local video box
+    addLocalVideo(localStream);
+    return localStream;
+  } catch (err) {
+    alert('Could not access camera/mic: ' + err.message);
+    throw err;
+  }
+}
+
+function addLocalVideo(stream) {
+  let box = document.getElementById('localVideoBox');
+  if (!box) {
+    box = document.createElement('div'); box.className = 'videoBox'; box.id = 'localVideoBox';
+    const v = document.createElement('video'); v.autoplay = true; v.muted = true; v.playsInline = true;
+    v.srcObject = stream;
+    box.appendChild(v);
+    const label = document.createElement('div'); label.className = 'label'; label.textContent = (me && me.displayName) ? me.displayName + ' (You)' : 'You';
+    box.appendChild(label);
+    videos.prepend(box);
+  } else {
+    box.querySelector('video').srcObject = stream;
+  }
+}
+
+function addRemoteVideo(peerId, username, stream) {
+  let box = document.getElementById('remote_' + peerId);
+  if (!box) {
+    box = document.createElement('div'); box.className = 'videoBox'; box.id = 'remote_' + peerId;
+    const v = document.createElement('video'); v.autoplay = true; v.playsInline = true;
+    v.srcObject = stream;
+    box.appendChild(v);
+    const label = document.createElement('div'); label.className = 'label'; label.textContent = username || peerId;
+    box.appendChild(label);
+    videos.appendChild(box);
+  } else {
+    box.querySelector('video').srcObject = stream;
+  }
+}
+
+function removeRemoteVideo(peerId) {
+  const box = document.getElementById('remote_' + peerId);
+  if (box) box.remove();
+}
+
+// ---- Signaling logic ----
+
+// create a new RTCPeerConnection for a given peerId
+function createPeerConnection(peerId, peerName) {
+  if (peerConnections[peerId]) return peerConnections[peerId];
+  const pc = new RTCPeerConnection(STUN_SERVERS);
+
+  // attach local tracks
+  if (localStream) {
+    localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
+  }
+
+  // remote tracks
+  const remoteStream = new MediaStream();
+  pc.ontrack = (evt) => {
+    evt.streams[0].getTracks().forEach(track => remoteStream.addTrack(track));
+    addRemoteVideo(peerId, peerName || peerId, remoteStream);
+  };
+
+  pc.onicecandidate = (e) => {
+    if (e.candidate) {
+      socket.emit('ice-candidate', { to: peerId, candidate: e.candidate, room: currentRoom });
+    }
+  };
+
+  pc.onconnectionstatechange = () => {
+    if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
+      removeRemoteVideo(peerId);
+      pc.close();
+      delete peerConnections[peerId];
+    }
+  };
+
+  peerConnections[peerId] = pc;
+  return pc;
+}
+
+// When we join a room we get a list of existing participants
+socket.on('existing-participants', async (data) => {
+  // data: { room, participants: [{id,username}], hostId }
+  if (data.room !== currentRoom) return;
+  for (const p of data.participants) {
+    if (p.id === me.id) continue;
+    participants[p.id] = p;
+    // create pc and make offer to each
+    const pc = createPeerConnection(p.id, p.username);
+    try {
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      socket.emit('offer', { to: p.id, offer: offer, room: currentRoom, fromInfo: { id: me.id, username: me.displayName } });
+    } catch (err) {
+      console.error('offer err', err);
+    }
+  }
+  updateParticipantsUI();
+});
+
+// New participant joined — we are asked to prepare for them (if we exist already)
+socket.on('new-participant', async (data) => {
+  // data: { id, username }
+  if (data.id === me.id) return;
+  participants[data.id] = { id: data.id, username: data.username };
+  updateParticipantsUI();
+});
+
+// answering/offers/candidates
+socket.on('offer', async (data) => {
+  // data: { from, offer, fromInfo }
+  if (data.to && data.to !== me.id) return; // not for me
+  const fromId = data.from;
+  const fromName = data.fromInfo && data.fromInfo.username;
+  const pc = createPeerConnection(fromId, fromName);
+  try {
+    await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
+    socket.emit('answer', { to: fromId, answer: answer, room: currentRoom });
+  } catch (err) {
+    console.error('answer error', err);
+  }
+});
+
+socket.on('answer', async (data) => {
+  // data: { from, answer }
+  const fromId = data.from;
+  const pc = peerConnections[fromId];
+  if (!pc) return;
+  try {
+    await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+  } catch (err) {
+    console.error('setRemoteDescription error', err);
+  }
+});
+
+socket.on('ice-candidate', (data) => {
+  // data: { from, candidate }
+  const pc = peerConnections[data.from];
+  if (pc && data.candidate) {
+    pc.addIceCandidate(new RTCIceCandidate(data.candidate)).catch(e => console.warn(e));
+  }
+});
+
+// room ended or participant left
+socket.on('participant-left', (data) => {
+  // data: { id }
+  delete participants[data.id];
+  if (peerConnections[data.id]) {
+    peerConnections[data.id].close();
+    delete peerConnections[data.id];
+  }
+  removeRemoteVideo(data.id);
+  updateParticipantsUI();
+});
+
+socket.on('room-ended', () => {
+  appendChatMessage('SYSTEM', 'Meeting ended by host', true);
+  leaveRoomCleanup();
+  alert('Meeting ended by host');
+  showLobbyUI();
+});
+
+socket.on('chat-message', (data) => {
+  appendChatMessage(data.username || 'Guest', data.message);
+});
+
+// ---- UI actions ----
+createBtn.onclick = async () => {
+  // create new code and call backend to persist room
+  const code = createCode();
+  // set host to me.id (if signed in)
+  if (!me) await fetchMe();
+  const displayName = createName.value || (me ? me.displayName : 'Host');
+  const res = await fetch('/api/rooms', {
+    method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ code, displayName, hostId: me ? me.id : null })
+  });
+  const data = await res.json();
+  if (data.ok) {
+    joinRoom(code, true);
+  } else {
+    alert('Could not create room: ' + (data.error || 'unknown'));
+  }
+};
+
+joinBtn.onclick = async () => {
+  const code = (joinCodeInput.value || '').trim().toUpperCase();
+  if (!code || code.length !== 6) { alert('Enter 6-char code'); return; }
+  // check with backend
+  const res = await fetch('/api/rooms/' + code);
+  const data = await res.json();
+  if (!data.exists) { alert('Room not found or ended'); return; }
+  joinRoom(code, false);
+};
+
+async function joinRoom(code, hostFlag=false) {
+  currentRoom = code;
+  isHost = !!hostFlag;
+  // ensure we have user info
+  if (!me) await fetchMe();
+  // ensure local stream
+  await ensureLocalStream();
+  // inform server via socket
+  socket.emit('join-room', { room: code, user: { id: me ? me.id : ('guest_'+Math.random().toString(36).slice(2,9)), username: me ? me.displayName : (createName.value || 'Guest') } });
+  showMeetingUI(code);
+  if (isHost) endBtn.classList.remove('hidden'); else endBtn.classList.add('hidden');
+  appendChatMessage('SYSTEM', 'You joined the meeting as ' + (me ? (me.displayName || me.email) : 'Guest'), true);
+}
+
+leaveBtn.onclick = () => {
+  socket.emit('leave-room', { room: currentRoom, userId: (me ? me.id : null) });
+  leaveRoomCleanup();
+  showLobbyUI();
+};
+
+endBtn.onclick = async () => {
+  if (!isHost) return alert('Only host can end the meeting');
+  await fetch('/api/rooms/' + currentRoom + '/end', { method: 'POST' });
+  socket.emit('end-room', { room: currentRoom });
+  leaveRoomCleanup();
+  showLobbyUI();
+};
+
+function leaveRoomCleanup() {
+  // close all peer connections
+  Object.values(peerConnections).forEach(pc => pc.close());
+  peerConnections = {};
+  participants = {};
+  currentRoom = null;
+  // remove video elements
+  videos.innerHTML = '';
+  participantsList.innerHTML = '';
+  chatBox.innerHTML = '';
+}
+
+// participants UI
+function updateParticipantsUI() {
+  participantsList.innerHTML = '';
+  Object.entries(participants).forEach(([id, p]) => {
+    const li = document.createElement('li');
+    li.textContent = p.username || id;
+    participantsList.appendChild(li);
+  });
+  // add local user
+  const meLi = document.createElement('li');
+  meLi.textContent = (me && me.displayName) ? (me.displayName + ' (You)') : 'You';
+  participantsList.prepend(meLi);
+}
+
+// ---- chat ----
+chatForm.addEventListener('submit', (e) => {
+  e.preventDefault();
+  const txt = chatInput.value.trim();
+  if (!txt) return;
+  socket.emit('chat', { room: currentRoom, username: (me ? me.displayName : 'Guest'), message: txt });
+  chatInput.value = '';
+});
+
+// ---- sign out ----
+signoutBtn.onclick = async () => {
+  await fetch('/auth/logout');
+  setUser(null);
+  location.href = '/';
+};
+
+// ---- initial actions ----
+fetchMe(); // populate user area
+
+// When socket connects, nothing automatic; we join rooms via UI.
+</script>
+</body>
+</html>
