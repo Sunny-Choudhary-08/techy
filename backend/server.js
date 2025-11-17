@@ -67,7 +67,8 @@ passport.use(new GoogleStrategy({
 }));
 
 // ----- Serve Frontend -----
-app.use(express.static(path.join(__dirname, '..', 'frontend')));
+app.use(express.static(path.join(__dirname, "../frontend")));
+
 
 // ----- Auth Routes -----
 app.get('/auth/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
